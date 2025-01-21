@@ -8,6 +8,7 @@ import csv
 import logging
 import sys
 import platform
+import subprocess  # 添加这行导入
 from contextlib import contextmanager
 import traceback
 
@@ -218,12 +219,28 @@ def create_number_transition(number, duration=1.0, size=(720, 1280), is_final=Fa
         image_path = f'transition_{number}.png'
         background.save(image_path)
         
+        # 修改音效处理逻辑
         clip = ImageClip(image_path).set_duration(duration)
         try:
-            audio = AudioFileClip("ding.wav").set_duration(duration)
-            clip = clip.set_audio(audio)
+            if not is_final:
+                # 普通过渡画面使用 ding 音效
+                audio = AudioFileClip("ding.wav")
+                # 只使用音效的前0.5秒
+                audio = audio.subclip(0, min(0.5, audio.duration))
+                # 将音效设置在画面开始时播放
+                audio = audio.set_start(0)
+                clip = clip.set_audio(audio)
+            else:
+                # 最终画面使用不同的音效
+                try:
+                    audio = AudioFileClip("end.wav")
+                    audio = audio.subclip(0, min(1.0, audio.duration))
+                    audio = audio.set_start(0)
+                    clip = clip.set_audio(audio)
+                except:
+                    pass
         except:
-            logging.warning("未找到音效文件 ding.wav")
+            logging.warning("未找到音效文件")
         
         return clip
 
@@ -235,195 +252,133 @@ def create_number_transition(number, duration=1.0, size=(720, 1280), is_final=Fa
 def merge_videos(input_dir=None, output_path=None, title="今日份快乐", author="", color_scheme='p6'):
     """合并视频文件，添加过渡画面"""
     try:
-        # 设置默认值并转换为绝对路径
-        if input_dir is None:
-            input_dir = os.path.abspath("./11-23")
-        else:
-            input_dir = os.path.abspath(input_dir)
-
-        # 确保输入目录存在
+        # 1. 输入准备阶段
+        input_dir = os.path.abspath(input_dir if input_dir else "./11-23")
         if not os.path.exists(input_dir):
             logging.error(f"输入目录不存在: {input_dir}")
             return False
 
         # 处理输出路径
-        if output_path is None:
+        if not output_path:
             output_path = os.path.join(input_dir, f"{datetime.now().strftime('%m-%d')}_merged.mp4")
-        else:
-            # 如果提供了输出路径，使用它的绝对路径
-            output_path = os.path.abspath(output_path)
+        output_path = os.path.abspath(output_path)
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-        # 创建输出目录（如果不存在）
-        output_dir = os.path.dirname(output_path)
-        os.makedirs(output_dir, exist_ok=True)
-
-        # 获取所有视频文件（使用完整路径）
+        # 扫描并过滤视频文件
         video_files = []
         for file in os.listdir(input_dir):
             if file.endswith(('.mp4', '.MP4', '.mov', '.MOV')):
-                full_path = os.path.join(input_dir, file)
-                video_files.append(full_path)
+                if not (file.startswith('merged-') or file.startswith('temp_')):
+                    video_files.append(file)
 
         if not video_files:
             logging.error(f"未找到视频文件: {input_dir}")
             return False
 
-        video_files.sort()  # 按文件名排序
-        video_count = len(video_files)
-        logging.info(f"找到 {video_count} 个视频文件")
+        video_files.sort()
+        
+        # 创建临时目录
+        temp_dir = os.path.join(input_dir, "temp_transitions")
+        os.makedirs(temp_dir, exist_ok=True)
 
-        clips = []  # 存储所有片段
-        
-        logging.info(f"\n=== 开始处理 ===")
-        logging.info(f"- 视频数量: {video_count}")
-        logging.info(f"- 输入目录: {input_dir}")
-        logging.info(f"- 输出文件: {output_path}")
-        
-        # 处理每个视频文件
-        for i, video_file in enumerate(video_files, 1):
-            try:
-                # 1. 创建过渡画面（普通的数字过渡）
-                logging.info(f"\n步骤 1/2: 创建过渡画面")
-                transition = create_number_transition(i, duration=1.0, size=(720, 1280), 
-                                                   is_final=False, video_count=video_count, 
-                                                   title_text=title, author_name=author if i == 1 else "", color_scheme=color_scheme)
-                if transition is None:
-                    raise Exception("过渡画面创建失败")
-                clips.append(transition)
-                logging.info("  √ 过渡画面添加成功")
-                
-                # 2. 加载视频
-                logging.info(f"\n步骤 2/2: 加载视频")
-                try:
-                    video = VideoFileClip(video_file)
-                    # 修改 resize 方法，避免使用 ANTIALIAS
-                    def custom_resize(pic):
-                        img = Image.fromarray(pic)
-                        resized = img.resize((720, 1280), Image.Resampling.LANCZOS)
-                        return np.array(resized)
-                    
-                    resized_video = video.fl_image(custom_resize)
-                    
-                    if resized_video.duration > 0:
-                        if resized_video.duration > 1:
-                            resized_video = resized_video.subclip(0, resized_video.duration - 0.5)
-                        clips.append(resized_video)
-                    else:
-                        raise Exception("视频长度无效")
-                    logging.info("  √ 视频添加成功")
-                    video.close()
-                except Exception as e:
-                    logging.warning(f"视频加载出错: {str(e)}")
-                    if 'video' in locals():
-                        video.close()
-                    raise
-
-                if video is None:
-                    raise Exception("视频加载失败")
-                clips.append(video)
-                logging.info("  √ 视频添加成功")
-                
-                # 如果是最后一个视频，添加最终过渡画面
-                if i == video_count:
-                    logging.info("\n添加最终过渡画面")
-                    final_transition = create_number_transition(i+1, duration=1.0, size=(720, 1280), is_final=True, color_scheme=color_scheme)
-                    if final_transition is None:
-                        raise Exception("最终过渡画面创建失败")
-                    clips.append(final_transition)
-                    logging.info("  √ 最终过渡画面添加成功")
-                
-            except Exception as e:
-                logging.error(f"\n处理视频出错: {str(e)}")
-                # 清理当前资源
-                if 'transition' in locals():
-                    try:
-                        transition.close()
-                    except:
-                        pass
-                if 'video' in locals():
-                    try:
-                        video.close()
-                    except:
-                        pass
-                raise
-        
-        # 最终合并
-        if not clips:
-            logging.error("\n错误: 没有可用的视频片段！")
-            return
-            
-        logging.info(f"\n=== 最终合并 ===")
-        logging.info(f"- 待合并片段数: {len(clips)}")
-        logging.info(f"- 输出文件: {output_path}")
-        
         try:
-            # 合并所有片段
-            final = concatenate_videoclips(clips, method="compose")
-            if final is None:
-                raise Exception("视频合并失败")
-            
-            logging.info("  √ 片段合并成功")
-            logging.info("\n写入最终文件...")
-            
-            # 写入文件
-            try:
-                final.write_videofile(
-                    output_path,
+            processed_clips = []  # 存储处理后的视频片段路径
+
+            # 2. 处理每个视频片段
+            for i, video_file in enumerate(video_files):
+                # 生成过渡画面
+                transition = create_number_transition(
+                    i + 1,
+                    duration=0.5,  # 过渡画面固定0.5秒
+                    title_text=title if i == 0 else None,
+                    author_name=author if i == 0 else None,
+                    color_scheme=color_scheme
+                )
+
+                # 加载原始视频
+                video_path = os.path.join(input_dir, video_file)
+                video = VideoFileClip(video_path)
+
+                # 合并过渡画面和视频
+                segment_path = os.path.join(temp_dir, f'segment_{i+1}.mp4')
+                combined = concatenate_videoclips([transition, video])
+                combined.write_videofile(
+                    segment_path,
                     codec='libx264',
                     audio_codec='aac',
-                    temp_audiofile='temp-audio_final.m4a',
-                    remove_temp=True,
-                    fps=30,
-                    threads=4,
-                    preset='medium',  # 使用medium预设，平衡速度和质量
-                    bitrate='4000k',
-                    audio_bitrate='192k'
+                    fps=30
                 )
-                logging.info("  √ 文件写入成功")
-            except Exception as e:
-                logging.warning(f"带音频导出失败，尝试无音频导出: {str(e)}")
-                final.without_audio().write_videofile(
-                    output_path,
-                    codec='libx264',
-                    fps=30,
-                    threads=4,
-                    preset='medium',
-                    bitrate='4000k'
-                )
-                logging.info("  √ 无音频文件写入成功")
-                
-        except Exception as e:
-            logging.error(f"\n最终合并失败: {str(e)}")
-            raise
-            
+
+                # 清理资源
+                transition.close()
+                video.close()
+                combined.close()
+
+                processed_clips.append(segment_path)
+
+            # 3. 添加最终点赞画面
+            final_transition = create_number_transition(
+                len(video_files) + 1,
+                duration=2.0,
+                is_final=True,
+                color_scheme=color_scheme
+            )
+            final_path = os.path.join(temp_dir, 'final.mp4')
+            final_transition.write_videofile(
+                final_path,
+                codec='libx264',
+                audio_codec='aac',
+                fps=30
+            )
+            final_transition.close()
+            processed_clips.append(final_path)
+
+            # 4. 使用ffmpeg合并所有处理好的片段
+            list_file = os.path.join(temp_dir, "list.txt")
+            with open(list_file, 'w', encoding='utf-8') as f:
+                for clip in processed_clips:
+                    f.write(f"file '{clip}'\n")
+
+            cmd = [
+                'ffmpeg',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', list_file,
+                '-c', 'copy',
+                output_path
+            ]
+
+            result = subprocess.run(
+                cmd,
+                cwd=input_dir,
+                capture_output=True,
+                text=True
+            )
+
+            if result.returncode != 0:
+                raise Exception(f"合并失败: {result.stderr}")
+
+            logging.info("\n=== 合并成功 ===")
+            logging.info(f"输出文件: {output_path}")
+
         finally:
-            # 清理所有资源
-            for clip in clips:
-                try:
-                    if clip is not None:
-                        clip.close()
-                except:
-                    pass
+            # 清理所有临时文件
             try:
-                if 'final' in locals() and final is not None:
-                    final.close()
-            except:
-                pass
-            
-            # 删除过渡图片
-            for i in range(1, video_count + 2):
-                try:
-                    transition_file = f'transition_{i}.png'
-                    if os.path.exists(transition_file):
-                        os.remove(transition_file)
-                except:
-                    pass
-                    
-        logging.info("\n=== 处理完成 ===")
-        logging.info(f"输出文件: {output_path}")
-        
+                import shutil
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir)
+                # 清理可能残留的PNG文件
+                for i in range(1, len(video_files) + 2):
+                    png_file = os.path.join(input_dir, f'transition_{i}.png')
+                    if os.path.exists(png_file):
+                        os.remove(png_file)
+            except Exception as e:
+                logging.warning(f"清理临时文件时出错: {str(e)}")
+
+        return True
+
     except Exception as e:
-        logging.error(f"\n发生错误: {str(e)}")
+        logging.error(f"发生错误: {str(e)}")
         raise
 
 def test_transition():
