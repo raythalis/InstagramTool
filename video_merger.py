@@ -7,7 +7,9 @@ import gc
 import csv
 import logging
 import sys
+import platform
 from contextlib import contextmanager
+import traceback
 
 # 配置日志
 logging.basicConfig(
@@ -65,18 +67,14 @@ def managed_resource(resource, resource_type="resource"):
     finally:
         if resource is not None:
             try:
-                # 处理不同类型的资源
                 if isinstance(resource, (VideoFileClip, ImageClip, AudioFileClip)):
-                    if hasattr(resource, 'close'):
-                        resource.close()
+                    resource.close()
                 elif isinstance(resource, Image.Image):
-                    if hasattr(resource, 'close'):
-                        try:
-                            resource.close()
-                        except Exception as e:
-                            # 忽略 PIL Image 特定的关闭错误
-                            if "Operation on closed image" not in str(e) and "'Image' object has no attribute 'fp'" not in str(e):
-                                logging.debug(f"Error closing image: {str(e)}")
+                    try:
+                        resource.close()
+                    except Exception as e:
+                        if "Operation on closed image" not in str(e) and "'Image' object has no attribute 'fp'" not in str(e):
+                            logging.debug(f"Error closing image: {str(e)}")
                 elif hasattr(resource, 'close'):
                     resource.close()
                 elif hasattr(resource, 'release'):
@@ -84,167 +82,143 @@ def managed_resource(resource, resource_type="resource"):
             except Exception as e:
                 logging.debug(f"Error closing {resource_type}: {str(e)}")
 
+def load_system_font(font_size):
+    """跨平台字体加载函数"""
+    system = platform.system()
+    
+    # Windows字体路径
+    if system == "Windows":
+        font_paths = [
+            "C:\\Windows\\Fonts\\msyh.ttc",  # 微软雅黑
+            "C:\\Windows\\Fonts\\simhei.ttf"  # 黑体
+        ]
+    # macOS字体路径
+    elif system == "Darwin":
+        font_paths = [
+            "/System/Library/Fonts/PingFang.ttc",  # 苹方
+            "/System/Library/Fonts/Supplemental/STHeiti Medium.ttc",  # 华文黑体
+            "/Library/Fonts/Microsoft/msyh.ttf",  # 微软雅黑（需手动安装）
+            "msyh.ttf"  # 项目本地字体
+        ]
+    else:  # Linux
+        font_paths = [
+            "/usr/share/fonts/truetype/msttcorefonts/msyh.ttf",
+            "msyh.ttf"
+        ]
+
+    for path in font_paths:
+        try:
+            return ImageFont.truetype(path, font_size)
+        except Exception as e:
+            continue
+    
+    logging.warning("未找到系统字体，使用默认字体")
+    return ImageFont.load_default()
+
 def create_number_transition(number, duration=1.0, size=(720, 1280), is_final=False, video_count=None, title_text="今日份快乐", author_name="", color_scheme='p6'):
-    """创建带数字的过渡画面"""
+    """创建带数字的过渡画面（跨平台版）"""
     try:
-        # 获取颜色方案
         scheme = COLOR_SCHEMES.get(color_scheme, COLOR_SCHEMES['p6'])
         bg_color = scheme['background']
         text_color = scheme['text']
-        
-        # 创建背景
+
         width, height = size
         background = Image.new('RGB', (width, height), bg_color)
         draw = ImageDraw.Draw(background)
-        
+
         if not is_final:
-            # 普通过渡画面：显示数字
-            # 加载字体
-            try:
-                font = ImageFont.truetype("arial.ttf", 80)
-            except:
-                font = ImageFont.load_default()
+            # 主字体加载
+            font = load_system_font(80)
             
-            # 计算文字大小和位置
+            # 动态计算布局
             text = str(number)
             bbox = draw.textbbox((0, 0), text, font=font)
             text_width = bbox[2] - bbox[0]
             text_height = bbox[3] - bbox[1]
-            
-            # 获取字体的度量信息以进行精确定位
             ascent, descent = font.getmetrics()
-            
-            # 计算圆的大小和位置
+
+            # 平台垂直位置补偿
+            vertical_offset = 30 if platform.system() == "Darwin" else 0
             circle_radius = max(text_width, text_height) * 0.8
             circle_x = width // 2
-            circle_y = height // 2
-            
+            circle_y = height // 2 + vertical_offset
+
             # 绘制圆形
-            circle_bbox = [
-                circle_x - circle_radius,
-                circle_y - circle_radius,
-                circle_x + circle_radius,
-                circle_y + circle_radius
-            ]
-            draw.ellipse(circle_bbox, outline=text_color, width=5)
-            
-            # 计算文字的精确位置，考虑字体的基线偏移
-            text_offset = (ascent - descent) // 2  # 考虑字体的基线偏移
+            draw.ellipse(
+                [circle_x - circle_radius, circle_y - circle_radius,
+                 circle_x + circle_radius, circle_y + circle_radius],
+                outline=text_color,
+                width=5
+            )
+
+            # 文字位置计算
+            text_offset = (ascent - descent) // 2
             text_x = circle_x - text_width // 2
-            text_y = circle_y - text_height // 2 - text_offset // 2  # 微调垂直位置
-            
-            # 绘制数字
+            text_y = circle_y - text_height // 2 - text_offset + (15 if platform.system() == "Darwin" else 0)
+
             draw.text((text_x, text_y), text, font=font, fill=text_color)
-            
-            # 只在第一个过渡画面显示作者名称
+
+            # 作者信息
             if number == 1 and author_name:
-                # 使用较小的字体大小
-                try:
-                    author_font = ImageFont.truetype("C:\\Windows\\Fonts\\msyh.ttc", 40)  # 微软雅黑
-                except:
-                    try:
-                        author_font = ImageFont.truetype("C:\\Windows\\Fonts\\simhei.ttf", 40)  # 黑体
-                    except:
-                        author_font = ImageFont.load_default()
-                
-                # 在数字下方显示作者名称
-                author_text = f"@{author_name}"  # 添加@符号
+                author_font = load_system_font(40)
+                author_text = f"@{author_name}"
                 author_bbox = draw.textbbox((0, 0), author_text, font=author_font)
                 author_x = (width - (author_bbox[2] - author_bbox[0])) // 2
-                author_y = circle_y + circle_radius + text_height + 320  # 在数字下方20像素处
-                
-                # 绘制作者名称
+                author_y = circle_y + circle_radius + (340 if platform.system() == "Darwin" else 320)
                 draw.text((author_x, author_y), author_text, font=author_font, fill=text_color)
-            
-            # 如果是第一个画面，添加标题
+
+            # 标题框
             if number == 1:
-                try:
-                    # 标题字体
-                    title_font_size = 60
-                    try:
-                        title_font = ImageFont.truetype("simhei.ttf", title_font_size)
-                    except:
-                        try:
-                            title_font = ImageFont.truetype("arial.ttf", title_font_size)
-                        except:
-                            title_font = ImageFont.load_default()
-                    
-                    # 标题文本和日期
-                    today = datetime.now()
-                    date_text = today.strftime("%m-%d")
-                    
-                    # 计算标题位置
-                    bbox = draw.textbbox((0, 0), title_text, font=title_font)
-                    title_width = bbox[2] - bbox[0]
-                    title_height = bbox[3] - bbox[1]
-                    
-                    # 计算日期位置
-                    date_bbox = draw.textbbox((0, 0), date_text, font=title_font)
-                    date_width = date_bbox[2] - date_bbox[0]
-                    
-                    # 计算文字总高度（包括间距）
-                    total_text_height = title_height + 20 + date_bbox[3] - date_bbox[1]  # 20是两行文字间的间距
-                    
-                    # 计算整个标题框的尺寸
-                    padding = 20  # 文字和边框的间距
-                    box_width = max(title_width, date_width) + (padding * 2)
-                    box_height = total_text_height + (padding * 2)
-                    
-                    # 计算标题框的位置（居中）
-                    box_x = (width - box_width) // 2
-                    box_y = circle_y - circle_radius - 320 - (box_height - total_text_height) // 2
-                    
-                    # 绘制边框
-                    draw.rectangle(
-                        [box_x, box_y, box_x + box_width, box_y + box_height],
-                        outline=text_color,
-                        width=3
-                    )
-                    
-                    # 在边框内居中绘制日期
-                    date_x = (width - date_width) // 2
-                    date_y = box_y + padding
-                    draw.text((date_x, date_y), date_text, font=title_font, fill=text_color)
-                    
-                    # 在日期下方居中绘制标题
-                    title_x = (width - title_width) // 2
-                    title_y = date_y + title_height + padding  # 日期下方padding像素
-                    draw.text((title_x, title_y), title_text, font=title_font, fill=text_color)
-                    
-                except Exception as e:
-                    logging.warning(f"添加标题失败: {str(e)}")
-            
+                title_font = load_system_font(60)
+                today = datetime.now().strftime("%m-%d")
+
+                # 动态计算标题框尺寸
+                title_bbox = draw.textbbox((0, 0), title_text, font=title_font)
+                date_bbox = draw.textbbox((0, 0), today, font=title_font)
+                
+                padding = 20
+                box_width = max(title_bbox[2], date_bbox[2]) + padding*2
+                box_height = (title_bbox[3] + date_bbox[3] + padding*3)
+                
+                # 平台垂直偏移
+                box_y_offset = -300 if platform.system() == "Darwin" else -320
+                box_y = circle_y - circle_radius + box_y_offset
+
+                # 绘制标题框
+                draw.rectangle(
+                    [(width//2 - box_width//2, box_y),
+                     (width//2 + box_width//2, box_y + box_height)],
+                    outline=text_color,
+                    width=3
+                )
+
+                # 绘制文字
+                date_x = (width - date_bbox[2]) // 2
+                date_y = box_y + padding
+                draw.text((date_x, date_y), today, font=title_font, fill=text_color)
+
+                title_x = (width - title_bbox[2]) // 2
+                title_y = date_y + title_bbox[3] + padding
+                draw.text((title_x, title_y), title_text, font=title_font, fill=text_color)
+
         else:
-            # 最后的过渡画面：显示三行文字
-            try:
-                font = ImageFont.truetype("simhei.ttf", 80)  # 使用更大的字体
-            except:
-                try:
-                    font = ImageFont.truetype("arial.ttf", 80)
-                except:
-                    font = ImageFont.load_default()
-            
+            # 最终画面
+            font = load_system_font(80)
             texts = ["★ 点赞支持 ★", "☆ 关注收藏 ☆", "◆ 转发分享 ◆"]
-            text_height = height // 4  # 从1/4处开始绘制
+            
+            total_height = sum(draw.textbbox((0,0), t, font=font)[3] for t in texts)
+            start_y = (height - total_height - 100) // 2  # 100为总行间距
             
             for text in texts:
-                # 计算每行文字的位置
-                bbox = draw.textbbox((0, 0), text, font=font)
-                text_width = bbox[2] - bbox[0]
-                text_x = (width - text_width) // 2
-                
-                # 绘制文字
-                draw.text((text_x, text_height), text, font=font, fill=text_color)
-                text_height += 150  # 行间距
-        
-        # 保存图片
+                bbox = draw.textbbox((0,0), text, font=font)
+                text_x = (width - bbox[2]) // 2
+                draw.text((text_x, start_y), text, fill=text_color, font=font)
+                start_y += bbox[3] + 50
+
         image_path = f'transition_{number}.png'
         background.save(image_path)
         
-        # 创建视频片段
         clip = ImageClip(image_path).set_duration(duration)
-        
-        # 添加音效
         try:
             audio = AudioFileClip("ding.wav").set_duration(duration)
             clip = clip.set_audio(audio)
@@ -252,10 +226,11 @@ def create_number_transition(number, duration=1.0, size=(720, 1280), is_final=Fa
             logging.warning("未找到音效文件 ding.wav")
         
         return clip
-        
+
     except Exception as e:
         logging.error(f"创建过渡画面时出错: {str(e)}")
         return None
+
 
 def merge_videos(input_dir=None, output_path=None, title="今日份快乐", author="", color_scheme='p6'):
     """合并视频文件，添加过渡画面"""
@@ -306,11 +281,6 @@ def merge_videos(input_dir=None, output_path=None, title="今日份快乐", auth
         
         # 处理每个视频文件
         for i, video_file in enumerate(video_files, 1):
-            logging.info(f"==================================================")
-            logging.info(f"处理视频 {i}/{video_count}")
-            logging.info(f"文件: {os.path.basename(video_file)}")
-            logging.info(f"==================================================")
-            
             try:
                 # 1. 创建过渡画面（普通的数字过渡）
                 logging.info(f"\n步骤 1/2: 创建过渡画面")
@@ -324,27 +294,30 @@ def merge_videos(input_dir=None, output_path=None, title="今日份快乐", auth
                 
                 # 2. 加载视频
                 logging.info(f"\n步骤 2/2: 加载视频")
-                # 添加错误处理和重试机制
                 try:
                     video = VideoFileClip(video_file)
-                    # 强制调整视频尺寸为 720x1280
-                    video = video.resize((720, 1280))
-                    if video.duration > 0:  # 确保视频长度有效
-                        # 获取实际可用的持续时间
-                        actual_duration = video.duration
-                        # 如果视频末尾有问题，稍微缩短持续时间
-                        if actual_duration > 1:  # 确保视频长度超过1秒
-                            video = video.subclip(0, actual_duration - 0.5)  # 去掉最后0.5秒
+                    # 修改 resize 方法，避免使用 ANTIALIAS
+                    def custom_resize(pic):
+                        img = Image.fromarray(pic)
+                        resized = img.resize((720, 1280), Image.Resampling.LANCZOS)
+                        return np.array(resized)
+                    
+                    resized_video = video.fl_image(custom_resize)
+                    
+                    if resized_video.duration > 0:
+                        if resized_video.duration > 1:
+                            resized_video = resized_video.subclip(0, resized_video.duration - 0.5)
+                        clips.append(resized_video)
                     else:
                         raise Exception("视频长度无效")
+                    logging.info("  √ 视频添加成功")
+                    video.close()
                 except Exception as e:
-                    logging.warning(f"视频加载出错，尝试备用方案: {str(e)}")
-                    # 备用方案：使用ffmpeg-python直接加载
-                    video = VideoFileClip(video_file)
-                    video = video.resize((720, 1280))
-                    if video.duration > 1:
-                        video = video.subclip(0, video.duration - 0.5)
-                
+                    logging.warning(f"视频加载出错: {str(e)}")
+                    if 'video' in locals():
+                        video.close()
+                    raise
+
                 if video is None:
                     raise Exception("视频加载失败")
                 clips.append(video)

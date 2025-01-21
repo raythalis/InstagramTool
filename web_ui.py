@@ -1,36 +1,33 @@
 import os
 import tempfile
 import json
+import importlib  # 添加这一行
 from typing import Optional, List
 import gradio as gr
-from video_downloader import download_videos, extract_instagram_links
+import video_down_play  # 修改这一行
 from video_merger import merge_videos, COLOR_SCHEMES
 
 def download_only(links: str, output_folder: str) -> str:
     """仅下载视频"""
     try:
+        # 重新加载模块以获取最新代码
+        importlib.reload(video_down_play)
+        
         # 确保输出文件夹存在
         os.makedirs(output_folder, exist_ok=True)
         
-        # 直接从文本中提取链接
-        links_list = extract_instagram_links(links)
+        # 从文本中提取链接
+        links_list = video_down_play.extract_video_links(links)  # 修改这一行
         if not links_list:
-            return """未找到有效的Instagram链接，请确保链接格式正确。
-                支持的格式：
-                - https://www.instagram.com/reel/xxx
-                - https://www.instagram.com/p/xxx
-                - https://www.instagram.com/reels/xxx
-                - https://www.instagram.com/stories/xxx
-                - https://www.instagram.com/tv/xxx"""
+            return "未找到有效的视频链接，请确保链接格式正确。"
         
         print(f"找到 {len(links_list)} 个有效链接：")
         for link in links_list:
             print(f"- {link}")
         
-        # 下载视频
-        download_videos(links_list, output_folder)
+        # 使用新的下载方法
+        return video_down_play.download_videos_with_playwright(links_list, output_folder)  # 修改这一行
         
-        return f"下载完成！视频已保存到: {output_folder}"
     except Exception as e:
         return f"下载过程中出错: {str(e)}"
 
@@ -120,10 +117,13 @@ def create_ui():
                         placeholder="粘贴Instagram视频链接，每行一个...",
                         lines=5
                     )
+                    # 使用当前日期作为默认下载目录
+                    from datetime import datetime
+                    default_folder = datetime.now().strftime("%m-%d")
                     download_output_folder = gr.Textbox(
                         label="下载保存路径",
                         placeholder="视频保存的文件夹路径",
-                        value="downloads"
+                        value=default_folder
                     )
                     download_btn = gr.Button("开始下载", variant="primary")
                     download_output = gr.Textbox(label="下载结果")
