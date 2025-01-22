@@ -1,5 +1,8 @@
 from moviepy.editor import VideoFileClip, concatenate_videoclips, ImageClip, AudioFileClip
 from PIL import Image, ImageDraw, ImageFont
+from PIL.Image import Resampling
+from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
+from moviepy.video.VideoClip import ColorClip
 import numpy as np
 import os
 from datetime import datetime
@@ -7,8 +10,7 @@ import gc
 import csv
 import logging
 import sys
-import platform
-import subprocess  # 添加这行导入
+import platform  # 添加这行导入
 from contextlib import contextmanager
 import traceback
 
@@ -249,9 +251,45 @@ def create_number_transition(number, duration=1.0, size=(720, 1280), is_final=Fa
         return None
 
 
+def resize_to_target(clip, target_size=(720, 1280)):
+    """智能调整视频尺寸，保持宽高比并添加黑边"""
+    target_width, target_height = target_size
+    
+    # 计算缩放比例
+    scale_ratio = min(target_width / clip.w, target_height / clip.h)
+    new_width = int(clip.w * scale_ratio)
+    new_height = int(clip.h * scale_ratio)
+    
+    try:
+        # 使用修复后的 resize 方法
+        resized = clip.resize(newsize=(new_width, new_height))
+    except Exception as e:
+        logging.error(f"视频缩放失败: {str(e)}")
+        raise
+    
+    # 创建背景黑边
+    background = ColorClip(
+        size=target_size,
+        color=(0, 0, 0),
+        duration=clip.duration
+    )
+    
+    # 居中合成视频
+    final_clip = CompositeVideoClip([
+        background,
+        resized.set_position(('center', 'center'))
+    ])
+    
+    return final_clip
+
 def merge_videos(input_dir=None, output_path=None, title="今日份快乐", author="", color_scheme='p6'):
     """合并视频文件，添加过渡画面"""
     try:
+        # 环境检查
+        import PIL
+        from moviepy import __version__ as mv_version
+        logging.info(f"环境验证: Pillow {PIL.__version__}, MoviePy {mv_version}")
+        
         # 1. 输入准备阶段
         input_dir = os.path.abspath(input_dir if input_dir else "./11-23")
         if not os.path.exists(input_dir):
@@ -292,6 +330,9 @@ def merge_videos(input_dir=None, output_path=None, title="今日份快乐", auth
                 # 检查原始视频是否可以正常打开
                 try:
                     with VideoFileClip(os.path.join(input_dir, video_file)) as test_video:
+                        # 记录视频信息，但不强制调整尺寸
+                        if test_video.size != (720, 1280):
+                            logging.info(f"视频 {video_file} 尺寸为 {test_video.size}，与标准尺寸(720x1280)不同")
                         logging.info(f"视频信息: 时长={test_video.duration}秒, 大小={test_video.size}")
                 except Exception as e:
                     logging.error(f"视频文件检查失败: {str(e)}")
@@ -311,6 +352,7 @@ def merge_videos(input_dir=None, output_path=None, title="今日份快乐", auth
                 # 加载原始视频
                 video_path = os.path.join(input_dir, video_file)
                 video = VideoFileClip(video_path)
+                video = resize_to_target(video)  # 添加智能尺寸调整
 
                 # 合并过渡画面和视频
                 segment_path = os.path.join(temp_dir, f'segment_{i+1}.mp4')
@@ -321,8 +363,13 @@ def merge_videos(input_dir=None, output_path=None, title="今日份快乐", auth
                         codec='libx264',
                         audio_codec='aac',
                         fps=30,
-                        preset='medium',  # 添加预设参数
-                        ffmpeg_params=['-strict', '-2']  # 添加额外的 ffmpeg 参数
+                        preset='medium',
+                        ffmpeg_params=[
+                            '-strict', '-2',
+                            '-profile:v', 'high',
+                            '-pix_fmt', 'yuv420p',
+                            '-movflags', '+faststart'
+                        ]
                     )
                     logging.info(f"第 {i+1} 个片段合成完成")
                 except Exception as e:
@@ -369,6 +416,8 @@ def merge_videos(input_dir=None, output_path=None, title="今日份快乐", auth
                 '-safe', '0',
                 '-i', list_file,
                 '-c', 'copy',
+                '-movflags', '+faststart',
+                '-pix_fmt', 'yuv420p',
                 output_path
             ]
 
