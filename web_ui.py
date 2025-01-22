@@ -6,6 +6,9 @@ from typing import Optional, List
 import gradio as gr
 import video_down_play  # 修改这一行
 from video_merger import merge_videos, COLOR_SCHEMES
+# 使用当前日期作为默认下载目录
+from datetime import datetime
+default_folder = datetime.now().strftime("%m-%d")
 
 def download_only(links: str, output_folder: str) -> str:
     """仅下载视频"""
@@ -117,9 +120,7 @@ def create_ui():
                         placeholder="粘贴Instagram视频链接，每行一个...",
                         lines=5
                     )
-                    # 使用当前日期作为默认下载目录
-                    from datetime import datetime
-                    default_folder = datetime.now().strftime("%m-%d")
+
                     download_output_folder = gr.Textbox(
                         label="下载保存路径",
                         placeholder="视频保存的文件夹路径",
@@ -140,7 +141,7 @@ def create_ui():
                     input_folder = gr.Textbox(
                         label="视频文件夹",
                         placeholder="包含要合并的视频的文件夹路径",
-                        value="downloads"
+                        value=default_folder
                     )
                     
                     refresh_btn = gr.Button("刷新视频列表")

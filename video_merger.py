@@ -283,17 +283,30 @@ def merge_videos(input_dir=None, output_path=None, title="今日份快乐", auth
 
         try:
             processed_clips = []  # 存储处理后的视频片段路径
+            transition_images = []  # 存储生成的过渡画面路径
 
             # 2. 处理每个视频片段
             for i, video_file in enumerate(video_files):
+                logging.info(f"\n处理第 {i+1} 个视频: {video_file}")
+                
+                # 检查原始视频是否可以正常打开
+                try:
+                    with VideoFileClip(os.path.join(input_dir, video_file)) as test_video:
+                        logging.info(f"视频信息: 时长={test_video.duration}秒, 大小={test_video.size}")
+                except Exception as e:
+                    logging.error(f"视频文件检查失败: {str(e)}")
+                    raise
+
                 # 生成过渡画面
                 transition = create_number_transition(
                     i + 1,
-                    duration=0.5,  # 过渡画面固定0.5秒
+                    duration=0.5,
                     title_text=title if i == 0 else None,
                     author_name=author if i == 0 else None,
                     color_scheme=color_scheme
                 )
+                # 记录生成的过渡画面路径
+                transition_images.append(f'transition_{i+1}.png')
 
                 # 加载原始视频
                 video_path = os.path.join(input_dir, video_file)
@@ -301,18 +314,26 @@ def merge_videos(input_dir=None, output_path=None, title="今日份快乐", auth
 
                 # 合并过渡画面和视频
                 segment_path = os.path.join(temp_dir, f'segment_{i+1}.mp4')
-                combined = concatenate_videoclips([transition, video])
-                combined.write_videofile(
-                    segment_path,
-                    codec='libx264',
-                    audio_codec='aac',
-                    fps=30
-                )
-
-                # 清理资源
-                transition.close()
-                video.close()
-                combined.close()
+                try:
+                    combined = concatenate_videoclips([transition, video])
+                    combined.write_videofile(
+                        segment_path,
+                        codec='libx264',
+                        audio_codec='aac',
+                        fps=30,
+                        preset='medium',  # 添加预设参数
+                        ffmpeg_params=['-strict', '-2']  # 添加额外的 ffmpeg 参数
+                    )
+                    logging.info(f"第 {i+1} 个片段合成完成")
+                except Exception as e:
+                    logging.error(f"合并第 {i+1} 个片段时出错: {str(e)}")
+                    raise
+                finally:
+                    # 确保资源被正确释放
+                    transition.close()
+                    video.close()
+                    if 'combined' in locals():
+                        combined.close()
 
                 processed_clips.append(segment_path)
 
@@ -323,6 +344,9 @@ def merge_videos(input_dir=None, output_path=None, title="今日份快乐", auth
                 is_final=True,
                 color_scheme=color_scheme
             )
+            # 记录最终画面路径
+            transition_images.append(f'transition_{len(video_files) + 1}.png')
+
             final_path = os.path.join(temp_dir, 'final.mp4')
             final_transition.write_videofile(
                 final_path,
@@ -358,20 +382,42 @@ def merge_videos(input_dir=None, output_path=None, title="今日份快乐", auth
             if result.returncode != 0:
                 raise Exception(f"合并失败: {result.stderr}")
 
+            # 清理过渡画面文件
+            for image_path in transition_images:
+                try:
+                    if os.path.exists(image_path):
+                        os.remove(image_path)
+                        logging.debug(f"已删除过渡画面: {image_path}")
+                except Exception as e:
+                    logging.warning(f"删除过渡画面失败 {image_path}: {str(e)}")
+
             logging.info("\n=== 合并成功 ===")
             logging.info(f"输出文件: {output_path}")
 
         finally:
             # 清理所有临时文件
             try:
+                # 清理临时目录
                 import shutil
                 if os.path.exists(temp_dir):
                     shutil.rmtree(temp_dir)
-                # 清理可能残留的PNG文件
-                for i in range(1, len(video_files) + 2):
-                    png_file = os.path.join(input_dir, f'transition_{i}.png')
-                    if os.path.exists(png_file):
-                        os.remove(png_file)
+                
+                # 清理过渡画面PNG文件
+                png_patterns = [
+                    'transition_*.png',  # 普通过渡画面
+                    'transition_final.png',  # 最终画面
+                    'transition_title.png'  # 标题画面
+                ]
+                
+                import glob
+                for pattern in png_patterns:
+                    for png_file in glob.glob(os.path.join(input_dir, pattern)):
+                        try:
+                            os.remove(png_file)
+                            logging.debug(f"已删除临时文件: {png_file}")
+                        except Exception as e:
+                            logging.warning(f"删除文件失败 {png_file}: {str(e)}")
+                            
             except Exception as e:
                 logging.warning(f"清理临时文件时出错: {str(e)}")
 
