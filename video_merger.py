@@ -15,6 +15,10 @@ import platform
 import subprocess
 from contextlib import contextmanager
 import traceback
+import warnings
+
+# 禁用所有警告
+warnings.filterwarnings('ignore')
 
 # 配置日志
 logging.basicConfig(
@@ -26,10 +30,17 @@ logging.basicConfig(
     ]
 )
 
-# 设置第三方库的日志级别为 ERROR，这样就不会显示 WARNING
+# 设置所有相关库的日志级别为 ERROR
 logging.getLogger('PIL').setLevel(logging.ERROR)
 logging.getLogger('moviepy').setLevel(logging.ERROR)
-logging.getLogger('ffmpeg').setLevel(logging.ERROR)  # 添加这行
+logging.getLogger('ffmpeg').setLevel(logging.ERROR)
+logging.getLogger('moviepy.video.io.ffmpeg_reader').setLevel(logging.ERROR)  # 特别添加这个
+logging.getLogger('moviepy.audio.io.ffmpeg_reader').setLevel(logging.ERROR)
+logging.getLogger('moviepy.video.io.ffmpeg_writer').setLevel(logging.ERROR)
+logging.getLogger('moviepy.audio.io.ffmpeg_writer').setLevel(logging.ERROR)
+
+# 禁用 ffmpeg-python 的警告
+os.environ["IMAGEIO_FFMPEG_EXE"] = "ffmpeg"
 
 # 颜色方案配置
 COLOR_SCHEMES = {
