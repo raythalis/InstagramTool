@@ -300,7 +300,7 @@ def create_ui():
                             f"p5 - 现代灰白 ({COLOR_SCHEMES['p5']['background']}/{COLOR_SCHEMES['p5']['text']})",
                             f"p6 - 经典白黑 ({COLOR_SCHEMES['p6']['background']}/{COLOR_SCHEMES['p6']['text']})"
                         ],
-                        value=f"p6 - 经典白黑 ({COLOR_SCHEMES['p6']['background']}/{COLOR_SCHEMES['p6']['text']})",
+                        value=f"p5 - 现代灰白 ({COLOR_SCHEMES['p5']['background']}/{COLOR_SCHEMES['p5']['text']})",
                         type="value"
                     )
                     

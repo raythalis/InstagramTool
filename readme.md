@@ -25,6 +25,8 @@ cd insGenerate
 
 2. 安装依赖：
 ```bash
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -149,6 +151,15 @@ python video_merger.py -i "11-23" -o "output.mp4" -c "p3"
 ```
 
 ## 更新日志
+
+### v1.1.1
+- 优化过渡画面文件管理
+  * 自动清理临时过渡画面文件
+  * 改进文件清理机制，确保不留残余文件
+  * 添加文件清理日志记录
+- 修复已知问题
+  * 解决过渡画面文件未及时清理的问题
+  * 优化临时文件处理逻辑
 
 ### v1.1.0
 - 添加过渡画面颜色方案功能
