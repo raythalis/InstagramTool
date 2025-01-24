@@ -33,18 +33,34 @@ pip install -r requirements.txt
 3. 创建cookies文件：
 登录Instagram，使用cookie editor或其他浏览器工具导出Netscape格式的cookies，并将cookies.txt保存到项目文件夹中。
 
-### 基本使用
-
-#### 方式一：Web界面（推荐）
-
-1. 启动Web界面：
+4. 设置启动脚本权限（仅macOS/Linux）：
 ```bash
-python web_ui.py
+chmod +x start.command
 ```
 
-2. 在浏览器中访问显示的地址（通常是 http://127.0.0.1:8080）
+### 基本使用
 
-3. 使用Web界面：
+#### 方式一：图形界面启动（推荐）
+
+1. macOS用户：
+   - 双击 `start.command` 文件启动程序
+   - 如果遇到"无法打开"的安全提示：
+     * 打开系统偏好设置
+     * 点击"安全性与隐私"
+     * 在"通用"标签中点击"仍要打开"
+
+2. Windows/Linux用户：
+   - 双击 `start.sh` 文件启动程序
+   - 或在终端中执行：
+   ```bash
+   ./start.sh
+   ```
+
+3. 在浏览器中使用：
+   - 程序启动后会自动打开浏览器窗口（http://127.0.0.1:8080）
+   - 如果浏览器没有自动打开，请手动访问上述地址
+
+4. Web界面使用：
    - 在"下载视频"标签页：
      * 粘贴Instagram视频链接
      * 选择输出目录
@@ -151,6 +167,13 @@ python video_merger.py -i "11-23" -o "output.mp4" -c "p3"
 ```
 
 ## 更新日志
+
+### v1.1.2 (2024-03-20)
+- 添加便捷启动脚本
+  * 支持 macOS 系统一键启动（start.command）
+  * 支持 Windows/Linux 系统启动（start.sh）
+  * 自动检测和创建虚拟环境
+  * 优化启动体验和错误提示
 
 ### v1.1.1
 - 优化过渡画面文件管理
