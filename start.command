@@ -12,9 +12,15 @@ if [ ! -d "venv" ]; then
     python3 -m venv venv
 fi
 
-# 激活虚拟环境并启动程序
+# 激活虚拟环境
 echo "正在启动程序..."
 source venv/bin/activate
+
+# 检查并安装 playwright 浏览器
+if ! playwright install chromium --with-deps >/dev/null 2>&1; then
+    echo "正在安装必要的浏览器组件..."
+    python -m playwright install chromium --with-deps
+fi
 
 # 启动 web_ui.py
 python web_ui.py
