@@ -1,197 +1,95 @@
-# Instagram 视频批量下载与合并工具
+# Instagram 视频批量下载器（二次开发版）
 
-这是一个用于批量下载Instagram视频并将其合并的工具套件，包含三个主要组件：视频下载器、视频合并器和Web界面。
+> 二次开发自 [insGenerate](https://github.com/kakaoxy/insGenerate) ，特别感谢 @kakaoxy 的开源贡献！
 
-## 功能特点
+## 项目简介
 
-- 批量下载Instagram视频
-- 自动生成过渡画面
-- 视频合并与转场效果
-- 支持自定义标题和作者
-- 支持多种颜色方案
-- 美观的进度显示
-- 直观的Web操作界面
-- 支持视频预览和手动排序
+本项目基于原仓库进行了二次开发，实现了在 **无浏览器 GUI 环境下**，通过模拟用户点击 **SnapInsta** 下载按钮来批量下载 Instagram 视频的功能。
+
+主要功能包括：
+
+- 批量下载 Instagram 视频和图片
+- 使用 Playwright 模拟点击下载按钮，无需手动操作
+- 自定义下载目录，并支持 Docker 容器化运行
+- 支持视频合并功能，方便制作合集
+
+## 改动说明
+
+相比原仓库，本项目主要做了以下改动：
+
+1. **Docker 支持更便捷**
+    - 提供 `Dockerfile`，用户可以快速构建镜像并运行
+    - 支持目录映射（`-v /宿主机路径/downloads:/app/downloads`），方便管理下载文件
+
+2. **修复 SnapInsta 页面元素变动问题**
+    - 原仓库在新版 SnapInsta 页面中，输入 URL 和点击下载按钮无法正常工作，本项目修复了该问题，确保能正确识别下载按钮和链接
+
+3. **修复视频下载问题**
+    - 改进下载逻辑，通过按钮文本区分 “Download Photo” 与 “Download Video”，确保视频和图片都能正确下载
+
+4. **新增 `downloads` 文件夹**
+    - 默认下载路径为 `./downloads`，在 Docker 中可直接映射到宿主机目录
+    - 用户可在界面中自定义子目录，方便分类管理下载内容
 
 ## 快速开始
 
-### 安装
+### 1. 本地运行
 
-1. 克隆项目：
 ```bash
-git clone https://github.com/kakaoxy/insGenerate.git
-cd insGenerate
-```
-
-2. 安装依赖：
-```bash
-python3 -m venv venv
-source venv/bin/activate
+git clone <本仓库地址>
+cd <仓库目录>
 pip install -r requirements.txt
+python web_ui.py
 ```
+### 2.Docker构建并运行
 
-3. 创建cookies文件：
-登录Instagram，使用cookie editor或其他浏览器工具导出Netscape格式的cookies，并将cookies.txt保存到项目文件夹中。
-
-4. 设置启动脚本权限（仅macOS/Linux）：
 ```bash
-chmod +x start.command
+docker build -t instagram-tool:latest .
+docker run -it -p 8080:8080 -v /宿主机路径/downloads:/app/downloads instagram-tool:latest
 ```
+> 注：/宿主机路径/downloads 替换成你本地希望保存视频的路径
+> 
+> Docker 方式运行时，环境变量 HEADLESS 和 SERVER_NAME 保持默认值，不要修改，确保浏览器和服务器设置正常
 
-### 基本使用
+访问 http://localhost:8080 即可使用界面。
 
-#### 方式一：图形界面启动（推荐）
+### 3.从 Docker Hub 拉取并运行（无需本地构建）
 
-1. macOS用户：
-   - 双击 `start.command` 文件启动程序
-   - 如果遇到"无法打开"的安全提示：
-     * 打开系统偏好设置
-     * 点击"安全性与隐私"
-     * 在"通用"标签中点击"仍要打开"
-
-2. Windows/Linux用户：
-   - 双击 `start.sh` 文件启动程序
-   - 或在终端中执行：
-   ```bash
-   ./start.sh
-   ```
-
-3. 在浏览器中使用：
-   - 程序启动后会自动打开浏览器窗口（http://127.0.0.1:8080）
-   - 如果浏览器没有自动打开，请手动访问上述地址
-
-4. Web界面使用：
-   - 在"下载视频"标签页：
-     * 粘贴Instagram视频链接
-     * 选择输出目录
-     * 点击"开始下载"
-   - 在"合并视频"标签页：
-     * 选择要合并的视频
-     * 预览视频内容
-     * 设置第一个视频（其他视频将按文件名排序）
-     * 设置输出文件名
-     * 添加标题和作者信息
-     * 选择过渡画面颜色方案
-     * 点击"开始合并"
-
-#### 方式二：命令行
-
-1. 准备视频链接文件（links.txt）：
-```
-https://www.instagram.com/reel/xxx
-https://www.instagram.com/reel/yyy
-https://www.instagram.com/reel/zzz
-```
-
-2. 下载视频：
+1. 拉取镜像
 ```bash
-python video_downloader.py -i links.txt -o ./11-23
+docker pull yourusername/instagram-downloader:latest
 ```
 
-3. 合并视频：
+2. 运行容器并映射下载目录
 ```bash
-python video_merger.py -i "11-23" -o "11-23-final.mp4" -c "p1"
+docker run -it -p 8080:8080 -v /宿主机路径/downloads:/app/downloads yourusername/insta-downloader:latest
 ```
 
-## 详细使用说明
+## 使用示例
 
-### 1. Web界面 (web_ui.py)
+#### 下载视频
 
-提供图形化界面，方便直观地操作下载和合并功能。
+1. 在文本框中粘贴 Instagram 视频链接，每行一个
+2. 设置下载子目录（可选）
+3. 点击**开始下载**
+4. 下载完成后，可在 downloads/<子目录> 中找到文件
 
-#### 主要功能：
-- 视频下载：
-  * 支持单个或批量链接输入
-  * 实时显示下载进度
-  * 自动创建输出目录
+#### 合并视频
 
-- 视频合并：
-  * 视频预览功能
-  * 支持手动设置第一个视频
-  * 其他视频自动按文件名排序
-  * 自定义标题和作者信息
-  * 自定义过渡画面颜色方案
-  * 实时显示合并进度
+1. 选择包含视频的文件夹
+2. 刷新视频列表
+3. 选择要设为第一个的视频（可选）
+4. 设置输出文件路径和视频标题/作者
+5. 选择颜色方案
+6. 点击**开始合并**
 
-#### 颜色方案
-提供6种精心设计的过渡画面颜色方案：
-
-| 方案代码 | 名称 | 背景色 | 文字色 | 适用场景 |
-|---------|------|--------|--------|----------|
-| p1 | 经典黑白 | #FFFFFF | #333333 | 正式、商务 |
-| p2 | 柔和灰白 | #F5F5F5 | #2C3E50 | 优雅、简约 |
-| p3 | 暖色调 | #FFF8F0 | #8B4513 | 温馨、生活 |
-| p4 | 冷色调 | #F0F8FF | #1B4F72 | 科技、专业 |
-| p5 | 现代灰白 | #333333 | #FFFFFF | 时尚、潮流 |
-| p6 | 经典白黑 | #000000 | #FFFFFF | 高端、大气 |
-
-### 2. 下载视频 (video_downloader.py)
-
-提供Instagram视频下载功能。
-
-#### 命令行参数：
-- `-i, --input`: 输入文件路径（包含视频链接的文本文件）
-- `-o, --output`: 输出目录路径
-- `-s, --single`: 单个视频链接
-
-#### 示例：
+### 文件说明
 ```bash
-# 从文件批量下载
-python video_downloader.py -i links.txt -o ./videos
+├─ web_ui.py              # 主程序入口
+├─ video_down_play.py     # 下载逻辑
+├─ video_merger.py        # 视频合并逻辑
+├─ requirements.txt       # Python依赖
+├─ Dockerfile             # Docker镜像构建文件
+├─ downloads/             # 默认下载目录，可映射到宿主机
 
-# 下载单个视频
-python video_downloader.py -s "https://www.instagram.com/reel/xxx" -o ./videos
 ```
-
-### 3. 合并视频 (video_merger.py)
-
-提供视频合并功能，支持自定义过渡画面。
-
-#### 命令行参数：
-- `-i, --input_dir`: 输入视频目录
-- `-o, --output`: 输出视频文件路径
-- `-t, --title`: 视频标题（默认："今日份快乐"）
-- `-a, --author`: 作者名称（默认："Cynvann"）
-- `-c, --color_scheme`: 过渡画面颜色方案（默认："p6"）
-
-#### 示例：
-```bash
-# 基本使用
-python video_merger.py -i "11-23" -o "11-23-final.mp4"
-
-# 自定义标题和作者
-python video_merger.py -i "11-23" -o "output.mp4" -t "我的视频" -a "作者名"
-
-# 指定颜色方案
-python video_merger.py -i "11-23" -o "output.mp4" -c "p3"
-```
-
-## 更新日志
-
-### v1.1.2 (2024-03-20)
-- 添加便捷启动脚本
-  * 支持 macOS 系统一键启动（start.command）
-  * 支持 Windows/Linux 系统启动（start.sh）
-  * 自动检测和创建虚拟环境
-  * 优化启动体验和错误提示
-
-### v1.1.1
-- 优化过渡画面文件管理
-  * 自动清理临时过渡画面文件
-  * 改进文件清理机制，确保不留残余文件
-  * 添加文件清理日志记录
-- 修复已知问题
-  * 解决过渡画面文件未及时清理的问题
-  * 优化临时文件处理逻辑
-
-### v1.1.0
-- 添加过渡画面颜色方案功能
-- 支持6种预设颜色方案
-- 优化Web界面，添加颜色方案选择
-- 改进命令行工具，支持颜色方案参数
-
-### v1.0.0
-- 初始版本发布
-- 支持批量下载Instagram视频
-- 实现视频合并功能
-- 添加过渡画面效果

@@ -108,8 +108,8 @@ def create_ui():
         else:
             return [v["path"] for v in videos_data]
 
-    with gr.Blocks(title="Instagram视频批量下载器 欢迎关注视频号@Cynvann") as app:
-        gr.Markdown("# 📱 Instagram视频批量下载器 欢迎关注视频号@Cynvann")
+    with gr.Blocks(title="Instagram视频批量下载器") as app:
+        gr.Markdown("# 📱 Instagram视频批量下载器")
 
         with gr.Tabs():
             # 下载标签页
@@ -121,17 +121,35 @@ def create_ui():
                         lines=5
                     )
 
-                    download_output_folder = gr.Textbox(
-                        label="下载保存路径",
-                        placeholder="视频保存的文件夹路径",
-                        value=default_folder
-                    )
+                    with gr.Row():
+                        # 固定前缀，不可编辑
+                        prefix_box = gr.Textbox(
+                            label="保存路径前缀",
+                            value="./downloads/",  # 改成相对路径，方便本地和Docker
+                            interactive=False
+                        )
+                        # 用户输入部分
+                        sub_folder = gr.Textbox(
+                            label="子目录",
+                            placeholder="比如 myvideo",
+                        )
+
                     download_btn = gr.Button("开始下载", variant="primary")
                     download_output = gr.Textbox(label="下载结果")
 
+                    # 拼接完整路径再调用下载函数
+                    def download_only_with_prefix(links, subfolder):
+                        subfolder = subfolder.strip()
+                        # 拼接完整路径
+                        full_path = os.path.join("./downloads", subfolder)
+                        # 确保目录存在
+                        os.makedirs(full_path, exist_ok=True)
+                        # 调用原来的下载函数
+                        return download_only(links, full_path)
+
                     download_btn.click(
-                        fn=download_only,
-                        inputs=[links_input, download_output_folder],
+                        fn=download_only_with_prefix,
+                        inputs=[links_input, sub_folder],
                         outputs=download_output
                     )
 
@@ -324,14 +342,18 @@ def create_ui():
 
 if __name__ == "__main__":
     app = create_ui()
+
+    # 从环境变量读取配置
+    server_name = os.getenv("SERVER_NAME", "127.0.0.1")  # 默认 127.0.0.1
+    server_port = int(os.getenv("SERVER_PORT", 8080))    # 默认 8080
+
     app.launch(
-        server_name="0.0.0.0",  # 本地服务器地址
-        server_port=8080,         # 端口号
-        share=False,              # 不生成公共链接
-        inbrowser=True,           # 自动打开浏览器
-        show_api=False,           # 关闭API界面
-        auth=None,                # 不设置访问密码
-        favicon_path=None,        # 默认网站图标
-        quiet=False,               # 减少命令行输出
-        # enable_queue=True,        # 启用队列处理请求
+        server_name=server_name,
+        server_port=server_port,
+        share=False,        # 不生成公共链接
+        inbrowser=True,     # 自动打开浏览器
+        show_api=False,     # 关闭API界面
+        auth=None,          # 不设置访问密码
+        favicon_path=None,  # 默认网站图标
+        quiet=False,        # 减少命令行输出
     )

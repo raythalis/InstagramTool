@@ -20,8 +20,11 @@ def download_videos_with_playwright(links_list: List[str], output_folder: str) -
 
         with sync_playwright() as p:
             # 初始化浏览器
+            headless_env = os.getenv("HEADLESS", "true").lower()
+            headless = headless_env in ["1", "true", "yes"]
+
             browser = p.chromium.launch(
-                headless=False,
+                headless=headless,
                 args=['--start-maximized']
             )
             context = browser.new_context(
@@ -68,9 +71,18 @@ def download_videos_with_playwright(links_list: List[str], output_folder: str) -
                             print("下载按钮未找到，跳过该项")
                             continue
 
+                        # 获取按钮文本，用于判断类型
+                        button_text = download_button.inner_text().strip()
+                        if "Download Video" in button_text:
+                            ext = ".mp4"
+                        elif "Download Photo" in button_text:
+                            ext = ".jpg"
+                        else:
+                            ext = ".bin"  # 默认兜底
+
                         # 生成带时间戳的文件名
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        filename = f"snapinsta_{timestamp}.jpg"  # 如果是视频，改成 .mp4
+                        filename = f"snapinsta_{timestamp}{ext}"
                         save_path = os.path.join(output_folder, filename)
 
                         # 设置下载处理
