@@ -57,12 +57,12 @@ docker run -it -p 8080:8080 -v /宿主机路径/downloads:/app/downloads instagr
 
 1. 拉取镜像
 ```bash
-docker pull yourusername/instagram-downloader:latest
+docker pull raythalis/instagram-tool:latest
 ```
 
 2. 运行容器并映射下载目录
 ```bash
-docker run -it -p 8080:8080 -v /宿主机路径/downloads:/app/downloads yourusername/insta-downloader:latest
+docker run -it -p 8080:8080 -v /宿主机路径/downloads:/app/downloads raythalis/instagram-tool:latest
 ```
 
 ## 使用示例
